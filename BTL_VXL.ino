@@ -4,9 +4,13 @@
 #include "PMS.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <SPI.h>                /* Giao tiếp SPI cho SD card */
+#include <SD.h>  
 
 #define RXD2 16
 #define TXD2 17
+#define SD_CS 5
+
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -21,6 +25,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 void read_bme();
 void read_pms();
 void oled();
+void saveData(); // lưu dữ liệu
 
 Adafruit_BME280 bme;
 
@@ -42,11 +47,34 @@ void setup(){
     while(1){}
   }
   display.clearDisplay();
+  // ====================== SD CARD ======================
+  if (!SD.begin(SD_CS)) {
+    Serial.println("Không tìm thấy SD Card");
+    while (1);
+  }
+
+  Serial.println("SD Card OK");
+
+  // Tạo file CSV và tiêu đề nếu chưa có
+  if (!SD.exists("/data.csv")) {
+
+    File file = SD.open("/data.csv", FILE_WRITE);
+
+    if (file) {
+
+      file.println("PM1.0,PM2.5,PM10,Temperature,Humidity,Pressure");
+
+      file.close();
+
+      Serial.println("Tạo file data.csv");
+    }
+  }
 }
 
 void loop(){
   read_bme();
   read_pms();
+  saveData();
   oled();
   //delay(2000);
 }
@@ -145,4 +173,37 @@ void read_pms(){
   } else {
     Serial.println("No data");
   }
+}
+void saveData() {
+
+  File file = SD.open("/data.csv", FILE_APPEND);
+
+  if (!file) {
+
+    Serial.println("Không mở được file");
+
+    return;
+  }
+
+  // ===== Ghi dữ liệu CSV =====
+  file.print(data.PM_AE_UG_1_0);
+  file.print(",");
+
+  file.print(data.PM_AE_UG_2_5);
+  file.print(",");
+
+  file.print(data.PM_AE_UG_10_0);
+  file.print(",");
+
+  file.print(bme.readTemperature());
+  file.print(",");
+
+  file.print(bme.readHumidity());
+  file.print(",");
+
+  file.println(bme.readPressure() / 100.0);
+
+  file.close();
+
+  Serial.println("Đã lưu dữ liệu vào SD");
 }
