@@ -6,28 +6,40 @@
 #include <Adafruit_SSD1306.h>
 #include <SPI.h>                /* Giao tiếp SPI cho SD card */
 #include <SD.h>  
+#include <RTClib.h>
 
 #define RXD2 16
 #define TXD2 17
 #define SD_CS 5
-
+#define LED_PIN  13
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define OLED_RESET  -1
 #define SCREEN_ADDRESS  0x3C
 
+/*=========PMS=========*/
 PMS pms(Serial2);
 PMS::DATA data;
 
+/*=========BME=========*/
+Adafruit_BME280 bme;
+
+/*=========RTC=========*/
+RTC_DS3231 rtc;
+DateTime t;
+
+/*=========OLED=========*/
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+/*=========FUNCTIONS=========*/
+void read_rtc();
 void read_bme();
 void read_pms();
 void oled();
 void saveData(); // lưu dữ liệu
 
-Adafruit_BME280 bme;
+
 
 void setup(){
   Wire.begin(21, 22);
@@ -41,6 +53,12 @@ void setup(){
     Serial.println("Không tìm thấy BME280");
     while(1){};
   }
+  /*=================RTC===============*/
+  if (!rtc.begin()) {
+    Serial.println("Không tìm thấy DS3231");
+    while (1);
+  }
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); //set thời gian
 
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("Không tìm thấy địa chỉ OLED"));
@@ -62,21 +80,28 @@ void setup(){
 
     if (file) {
 
-      file.println("PM1.0,PM2.5,PM10,Temperature,Humidity,Pressure");
+      file.println("Date,Hour,Minute,Second,PM1.0,PM2.5,PM10,Temperature,Humidity,Pressure");
 
       file.close();
 
       Serial.println("Tạo file data.csv");
     }
   }
+  // ====================== LED ======================
+  pinMode(13, OUTPUT);
+  digitalWrite(13,LOW);
 }
 
 void loop(){
+  t = rtc.now();
+  read_rtc();
   read_bme();
-  read_pms();
-  saveData();
-  oled();
-  //delay(2000);
+  if (pms.readUntil(data)) {
+    read_pms();
+    saveData();
+    oled();
+  }
+  delay(5000);
 }
 
 
@@ -126,8 +151,6 @@ void oled(){
     display.print("hPa");
 
     display.display();
-
-  delay(2000);
   }
   else{
     display.clearDisplay();
@@ -139,6 +162,25 @@ void oled(){
   }
 }
 
+void read_rtc(){
+  Serial.print(t.day());
+  Serial.print("/");
+
+  Serial.print(t.month());
+  Serial.print("/");
+
+  Serial.print(t.year());
+  Serial.print("  ");
+
+  Serial.print(t.hour());
+  Serial.print(":");
+
+  Serial.print(t.minute());
+  Serial.print(":");
+
+  Serial.println(t.second());
+
+}
 
 void read_bme(){
   Serial.print("Temp = ");
@@ -157,8 +199,6 @@ void read_bme(){
 }
 
 void read_pms(){
-  if (pms.readUntil(data)) {
-
     Serial.print("PM1.0: ");
     Serial.println(data.PM_AE_UG_1_0);
 
@@ -167,12 +207,12 @@ void read_pms(){
 
     Serial.print("PM10 : ");
     Serial.println(data.PM_AE_UG_10_0);
-
-    Serial.println("------");
-
-  } else {
-    Serial.println("No data");
-  }
+    if(data.PM_AE_UG_2_5 >= 29){
+      digitalWrite(13, HIGH);
+    }
+    else{
+      digitalWrite(13, LOW);
+    }
 }
 void saveData() {
 
@@ -186,6 +226,26 @@ void saveData() {
   }
 
   // ===== Ghi dữ liệu CSV =====
+  //RTC
+  file.print(t.day());
+  file.print("-");
+
+  file.print(t.month());
+  file.print("-");
+
+  file.print(t.year());
+  file.print(",");
+
+  file.print(t.hour());
+  file.print(",");
+
+  file.print(t.minute());
+  file.print(",");
+
+  file.print(t.second());
+  file.print(",");
+
+  //PMS
   file.print(data.PM_AE_UG_1_0);
   file.print(",");
 
@@ -195,6 +255,7 @@ void saveData() {
   file.print(data.PM_AE_UG_10_0);
   file.print(",");
 
+  //BME
   file.print(bme.readTemperature());
   file.print(",");
 
@@ -206,4 +267,5 @@ void saveData() {
   file.close();
 
   Serial.println("Đã lưu dữ liệu vào SD");
+  Serial.println("------");
 }
