@@ -302,7 +302,7 @@ void saveData()
   file.print(":");
 
   file.print(t.second());
-  file.println(",");
+  file.print(",");
 
   //PMS
   file.print(data.PM_AE_UG_1_0);
